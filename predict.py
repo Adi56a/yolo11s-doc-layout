@@ -8,7 +8,7 @@ import cv2
 def main():
     parser = argparse.ArgumentParser(description="Standalone YOLO Layout Inference script")
     parser.add_argument("--image", type=str, required=True, help="Path to test image file")
-    parser.add_argument("--weights", type=str, default="best.pt", help="Path to weights file (default: best.pt)")
+    parser.add_argument("--weights", type=str, default="110-best.pt", help="Path to weights file (default: 110-best.pt)")
     parser.add_argument("--conf", type=float, default=0.25, help="Confidence threshold (default: 0.25)")
     parser.add_argument("--output", type=str, default="output.jpg", help="Path to save annotated output image")
     args = parser.parse_args()
@@ -22,13 +22,17 @@ def main():
     # Verify weights exist
     weights_path = Path(args.weights)
     if not weights_path.exists():
-        # Fall back to parent models folder if running from project root
-        project_weights = Path("models/custom_best.pt")
-        if project_weights.exists():
-            weights_path = project_weights
+        # Fall back to best.pt in current directory if 110-best.pt is missing
+        if Path("best.pt").exists():
+            weights_path = Path("best.pt")
         else:
-            print(f"[✗] Error: Weights file not found: {weights_path}")
-            sys.exit(1)
+            # Fall back to parent models folder if running from project root
+            project_weights = Path("../models/custom_best.pt")
+            if project_weights.exists():
+                weights_path = project_weights
+            else:
+                print(f"[✗] Error: Weights file not found: {weights_path}")
+                sys.exit(1)
 
     print(f"[*] Loading model weights from: {weights_path}")
     model = YOLO(str(weights_path))
@@ -44,11 +48,17 @@ def main():
     # Class mappings
     class_names = model.names
     
-    # Class colors for visual feedback: Diagram is yellow (0, 255, 255), Text is indigo (99, 102, 241)
-    # OpenCV uses BGR: Diagram = (0, 255, 255), Text = (241, 102, 99)
+    # Class colors for visual feedback (OpenCV uses BGR format: Blue, Green, Red)
     colors = {
-        0: (0, 255, 255),  # Diagram (Yellow)
-        1: (241, 102, 99)  # Text (Indigo/Pinkish-blue)
+        0: (241, 102, 99),    # block_text (Indigo - BGR)
+        1: (0, 234, 255),    # block_diagram (Yellow - BGR)
+        2: (129, 185, 16),   # block_table (Green - BGR)
+        3: (11, 158, 245),   # block_rough (Amber - BGR)
+        4: (128, 114, 107),  # block_empty (Gray - BGR)
+        5: (153, 72, 236),   # question (Pink - BGR)
+        6: (246, 92, 139),   # sub_question (Purple - BGR)
+        7: (212, 182, 6),    # block_graph (Cyan - BGR)
+        8: (68, 68, 239)     # block_map (Red - BGR)
     }
 
     # Load original image for custom styled rendering
