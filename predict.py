@@ -2,40 +2,73 @@ import os
 import sys
 import argparse
 from pathlib import Path
-from ultralytics import YOLO
 import cv2
+
+# Ensure local imports work regardless of working directory
+sys.path.append(str(Path(__file__).parent.resolve()))
 
 def main():
     parser = argparse.ArgumentParser(description="Standalone YOLO Layout Inference script")
     parser.add_argument("--image", type=str, required=True, help="Path to test image file")
-    parser.add_argument("--weights", type=str, default="110-best.pt", help="Path to weights file (default: 110-best.pt)")
+    parser.add_argument("--weights", type=str, default="models/110-best.pt", help="Path to weights file (default: models/110-best.pt)")
     parser.add_argument("--conf", type=float, default=0.25, help="Confidence threshold (default: 0.25)")
     parser.add_argument("--output", type=str, default="output.jpg", help="Path to save annotated output image")
+    parser.add_argument("--engine", type=str, default="auto", choices=["auto", "ultralytics", "onnx_pure"], help="Inference engine to use (default: auto)")
     args = parser.parse_args()
 
     # Verify input image exists
     img_path = Path(args.image)
     if not img_path.exists():
-        print(f"[✗] Error: Image path does not exist: {img_path}")
+        print(f"[x] Error: Image path does not exist: {img_path}")
         sys.exit(1)
 
-    # Verify weights exist
+    # Verify weights exist with flexible fallback order
     weights_path = Path(args.weights)
     if not weights_path.exists():
-        # Fall back to best.pt in current directory if 110-best.pt is missing
-        if Path("best.pt").exists():
-            weights_path = Path("best.pt")
-        else:
-            # Fall back to parent models folder if running from project root
+        fallback_names = ["110-best.onnx", "110-best.pt", "best.onnx", "best.pt"]
+        found = False
+        script_dir = Path(__file__).parent.resolve()
+        for fname in fallback_names:
+            paths_to_check = [
+                script_dir / "models" / fname,
+                Path("models") / fname,
+                Path(fname)
+            ]
+            for p in paths_to_check:
+                if p.exists():
+                    weights_path = p
+                    found = True
+                    break
+            if found:
+                break
+        if not found:
             project_weights = Path("../models/custom_best.pt")
             if project_weights.exists():
                 weights_path = project_weights
             else:
-                print(f"[✗] Error: Weights file not found: {weights_path}")
+                print(f"[x] Error: Weights file not found: {weights_path}")
                 sys.exit(1)
 
-    print(f"[*] Loading model weights from: {weights_path}")
-    model = YOLO(str(weights_path))
+    # Determine execution engine
+    use_onnx_pure = False
+    if args.engine == "onnx_pure":
+        use_onnx_pure = True
+    elif args.engine == "auto":
+        if weights_path.suffix.lower() == ".onnx":
+            use_onnx_pure = True
+
+    if use_onnx_pure and weights_path.suffix.lower() != ".onnx":
+        print(f"[x] Error: Pure ONNX Runtime engine requires weights ending with .onnx (got {weights_path})")
+        sys.exit(1)
+
+    if use_onnx_pure:
+        print(f"[*] Loading model via pure ONNX Runtime from: {weights_path}")
+        from onnx_inference import YOLOONNX
+        model = YOLOONNX(str(weights_path))
+    else:
+        print(f"[*] Loading model via Ultralytics from: {weights_path}")
+        from ultralytics import YOLO
+        model = YOLO(str(weights_path))
 
     print(f"[*] Running inference on: {img_path}")
     results = model.predict(source=str(img_path), conf=args.conf)
@@ -64,7 +97,7 @@ def main():
     # Load original image for custom styled rendering
     img = cv2.imread(str(img_path))
     if img is None:
-        print("[✗] Error: OpenCV failed to read the image.")
+        print("[x] Error: OpenCV failed to read the image.")
         sys.exit(1)
 
     overlay = img.copy()
@@ -99,7 +132,7 @@ def main():
     # Save output image
     out_path = Path(args.output)
     cv2.imwrite(str(out_path), img)
-    print(f"[✓] Inference complete! Annotated image saved to: {out_path.resolve()}")
+    print(f"[+] Inference complete! Annotated image saved to: {out_path.resolve()}")
 
 if __name__ == "__main__":
     main()
