@@ -1,0 +1,36 @@
+# ==============================================================================
+# MARKSENSE PIPELINE GITIGNORE
+# ==============================================================================
+
+# Credentials and secrets
+.env
+
+# Pipeline execution output directories
+outputs/
+
+# Python bytecode and build caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+
+# IDE/Editor project configurations
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# OS generated system files
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Python virtual environments
+venv/
+.venv/
+env/
+ENV/
