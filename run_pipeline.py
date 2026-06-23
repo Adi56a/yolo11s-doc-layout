@@ -69,7 +69,7 @@ class MarksensePipeline:
 
     def resolve_weights(self) -> Path:
         """Finds the YOLO model weights path with fallbacks."""
-        configured_path = os.getenv("YOLO_WEIGHTS_PATH", "models/best.onnx")
+        configured_path = os.getenv("YOLO_WEIGHTS_PATH", "models/110-best.pt")
         path = Path(configured_path)
         if path.exists():
             return path
@@ -77,11 +77,11 @@ class MarksensePipeline:
         # Fallbacks in script folder or project parent
         script_dir = Path(__file__).parent.resolve()
         fallbacks = [
-            script_dir / "models" / "best.onnx",
-            script_dir / "models" / "best.pt",
-            script_dir / "models" / "110-best.onnx",
             script_dir / "models" / "110-best.pt",
-            Path("models") / "best.onnx",
+            script_dir / "models" / "110-best.onnx",
+            script_dir / "models" / "best.pt",
+            script_dir / "models" / "best.onnx",
+            Path("models") / "110-best.pt",
             Path("models") / "best.pt"
         ]
         for f in fallbacks:

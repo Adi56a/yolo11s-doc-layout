@@ -1,14 +1,16 @@
-# 🤖 YOLO11s Document Layout Inference Hub 📄
+# 🤖 YOLO11s Document Layout & Marksense Pipeline Hub 📄
 
-Welcome to the **Marksense Document Layout & Pipeline Hub**. This repository contains the optimized assets, model specifications, and execution scripts for our fine-tuned **YOLO11s Document Layout Model**, built to split, segment, analyze, and map handwritten student answer sheets.
+This repository contains two primary modules:
+1. **Interactive Layout Inference & Visualization Utilities** (`app.py` and `predict.py`): Visual playground tools designed to display and test YOLO model detections using drawn bounding boxes.
+2. **End-to-End Production Processing Pipeline** (`run_pipeline.py`): The core backend pipeline that converts student PDF sheets to images, uploads pages to S3, crops layout elements, uploads block crops to S3, runs OCR text extraction, and maps student answers to question anchors—returning clean, structured JSON payloads.
 
 ---
 
-## 📋 1. Model Overview & Class Definitions
+## 📋 1. Core Model Class Definitions
 
-The layout model segments document elements into 9 semantic classes. These colored borders help downstream optical character recognition (OCR) and layout analysis tools structure pages:
+The YOLO model segments document elements into 9 distinct semantic layout classes:
 
-| Class ID | Class Name | Target Element | Visual Indicator | RGB Color |
+| Class ID | Class Name | Target Element | Visual Indicator | Default Color (RGB) |
 | :---: | :--- | :--- | :---: | :--- |
 | **0** | `block_text` | Standard paragraph text blocks | 🔵 | Indigo (`99, 102, 241`) |
 | **1** | `block_diagram` | Visual illustrations, drawings | 🟡 | Yellow (`255, 234, 0`) |
@@ -17,95 +19,32 @@ The layout model segments document elements into 9 semantic classes. These color
 | **4** | `block_empty` | Empty structural padding blocks | ⚫ | Gray (`107, 114, 128`) |
 | **5** | `question` | Primary question text boundaries | 💗 | Pink (`236, 72, 153`) |
 | **6** | `sub_question` | Sub-parts or nested questions | 🟣 | Purple (`139, 92, 246`) |
-| **7** | `block_graph` | Chart plots, line/bar/pie charts | 🐟 | Cyan (`6, 182, 212`) |
+| **7** | `block_graph` | Chart plots, line/bar/pie charts | cyan | Cyan (`6, 182, 212`) |
 | **8** | `block_map` | Cartographic maps, spatial plots | 🔴 | Red (`239, 68, 68`) |
 
 ---
 
-## ⚙️ 2. Model Architecture & Resource Metrics
+## 🛠️ 2. Setup & Installation
 
-* **Base Network:** YOLO11s (Small variant—optimized balance between speed and precision)
-* **Parameter Count:** `~9.4 Million` parameters
-* **File Weights Footprint:**
-  * **Production Weights (`custom_best.pt` / `best.onnx`):** `~19.3 MB` (stripped weights, clean of optimizer gradients)
-  * **Training Checkpoint (`110-best.pt`):** `~76 MB` (includes PyTorch optimizer state)
-* **Runtime Footprint (RAM):**
-  * **Warmup RAM state:** `< 100 MB`
-  * **Peak memory (300 DPI image buffers):** `< 500 MB`
-
----
-
-## ⚡ 3. Latency & Performance Specifications
-
-*Inference bench times evaluated on high-resolution **300 DPI** scanned pages ($2480 \times 3508$ pixels):*
-
-### 🟢 Server GPU (NVIDIA T4 Instance)
-* **Parallel Batch Mode ($imgsz=640$):** **`10 - 15 ms` per page** (Throughput: $65+$ pages/sec)
-* **High-Res Single Mode ($imgsz=1280$):** **`35 - 50 ms` per page** (Throughput: $20+$ pages/sec)
-
-### 🔵 Local CPU (standard Core i7 / VCPU)
-* **Optimized ONNX Runtime ($imgsz=640$):** **`70 - 110 ms` per page** (Throughput: $9+$ pages/sec)
-* **Raw PyTorch Runtime ($imgsz=1280$):** **`250 - 420 ms` per page** (Throughput: $2+$ pages/sec)
-
----
-
-## 📈 4. Optimization & Export Techniques (ONNX Roadmap)
-
-```mermaid
-graph LR
-    PT["PyTorch (.pt) Weights"] -->|onnx_inference.export_to_onnx| ONNX["ONNX Graph (.onnx)"]
-    ONNX -->|CPU execution| ORT["ONNX Runtime Engine"]
-    ONNX -->|GPU execution| TRT["TensorRT Engine"]
-    
-    style PT fill:#ef4444,stroke:#333,stroke-width:2px,color:#fff
-    style ONNX fill:#3b82f6,stroke:#333,stroke-width:2px,color:#fff
-    style ORT fill:#10b981,stroke:#333,stroke-width:2px,color:#fff
-    style TRT fill:#8b5cf6,stroke:#333,stroke-width:2px,color:#fff
+Install python dependencies from the manifest:
+```bash
+pip install -r requirements.txt
 ```
-
-> [!TIP]
-> **Why ONNX Export?**
-> * **2x to 3x Speedup:** Cuts CPU execution latency by **60% to 70%**.
-> * **Slimmer Containers:** Replaces PyTorch ($2+$ GB dependency) with `onnxruntime` ($~80$ MB), significantly shrinking production Docker image sizes.
+*(For headless Linux servers, `packages.txt` lists the `libgl1` and `libglib2.0-0` system packages required by OpenCV).*
 
 ---
 
-## 📂 5. Workspace Directory Structure
+## 🔄 3. Production Marksense Processing Pipeline (`run_pipeline.py`)
 
-```text
-inferences/
-├── models/                  # Fine-tuned PyTorch (.pt) and optimized ONNX (.onnx) weights
-│   ├── 110-best.onnx
-│   ├── 110-best.pt
-│   ├── best.onnx
-│   ├── best.pt
-│   └── custom_model.onnx
-├── samples/                 # Test images and benchmark outputs
-│   ├── cli_custom_onnx_test.jpg
-│   ├── cli_onnx_test.jpg
-│   ├── output.jpg
-│   └── output_test.jpg
-├── .env                     # Centralized project configuration (AWS/OCR settings)
-├── .env.example             # Template variables for .env
-├── s3_helper.py             # S3 AWS Uploader & local directory simulator
-├── ocr_helper.py            # OCR Engine wrapper (EasyOCR, PyTesseract, Mock fallbacks)
-├── run_pipeline.py          # End-to-end Marksense processing pipeline
-├── app.py                   # Streamlit Interactive Playground & Latency Router
-├── predict.py               # Standalone OpenCV bounding box annotation CLI
-├── onnx_inference.py        # CPU-optimized ONNX inference engine wrapper
-├── requirements.txt         # Python dependencies manifest
-└── packages.txt             # Headless Linux server dependencies (OpenGL/OpenCV)
-```
+> [!IMPORTANT]
+> **Production vs. Playground**
+> Unlike the playground tools which overlay boxes onto a single image, the **Marksense Pipeline** is a headless backend script designed to process student answer sheets end-to-end, upload files to S3, run local OCR, and generate structured JSON outputs matching answers to question papers.
 
----
-
-## 🔄 6. Marksense End-to-End Pipeline (`run_pipeline.py`)
-
-The pipeline automates the processing of student answer sheets. It coordinates splitting, uploading, layout detection, cropping, text extraction, and mapping:
+### 📶 Pipeline Architecture & Workflow
 
 ```mermaid
 flowchart TD
-    PDF[1. PDF Answer Sheet] -->|fitz Splitting| PNGs[2. Page Images P1.png, P2.png...]
+    PDF[1. PDF Answer Sheet] -->|fitz PDF Splitting| PNGs[2. Page Images P1.png, P2.png...]
     PNGs -->|s3_helper| S3Pages[(S3 answer_sheet_pages/)]
     PNGs -->|onnx_inference| YOLO[3. YOLO Layout Block Detection]
     YOLO -->|Direct crops| Crops[4. Crop PNGs P1_B1.png, P1_B2.png...]
@@ -119,60 +58,70 @@ flowchart TD
     style Maps fill:#111827,stroke:#10b981,stroke-width:2px,color:#fff
 ```
 
-### ⚙️ Pipeline Configuration
-Variables are loaded from the project's local [.env](file:///d:/NextLeap/block%20detection/inferences/.env) file:
-* `USE_LOCAL_STORAGE`: Toggle `True` for offline filesystem storage or `False` for real AWS S3 upload.
-* `OCR_ENGINE`: Options are `easyocr`, `pytesseract`, or `mock` (resilient offline fallback).
+### ⚙️ Pipeline Configuration (`.env` file)
+Rename [.env.example](file:///d:/NextLeap/block%20detection/inferences/.env.example) to `.env` and configure your credentials.
+
+* **AWS S3 Credentials:** Define `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, and `S3_BUCKET_NAME`.
+* **Local Storage Toggle:** Set `USE_LOCAL_STORAGE=True` to run offline (it will save files in `outputs/local_s3_mock` using S3 directory structure) or `False` to run real S3 uploads.
+* **OCR engine selection:** Set `OCR_ENGINE=mock` (instant offline testing), `easyocr` (local deep learning model), or `pytesseract` (local Tesseract wrapper).
 
 ### 📁 Dynamic S3 Folder Architecture
-Files are structured inside the S3 bucket using student-specific metadata prefixes:
+When uploading, S3 files are structured dynamically using the student parameters:
 ```text
 {school_name}/{academic_year}/{class}/{section}/{subject}/{assessment_id}/students/{student_id}/
 ├── answer_sheet_pages/
-│   ├── P1.png
-│   └── P2.png
+│   ├── P1.png            <-- Page 1 Image
+│   └── P2.png            <-- Page 2 Image
 └── answer_blocks/
-    ├── P1_B1.png
-    ├── P1_B2.png
-    └── P2_B1.png
+    ├── P1_B1.png         <-- Page 1, Crop Block 1
+    ├── P1_B2.png         <-- Page 1, Crop Block 2
+    └── P2_B1.png         <-- Page 2, Crop Block 1
 ```
 
-### 🚀 Execution Command
-Execute the end-to-end pipeline run from the CLI using:
+### 🚀 Pipeline Execution Command
+To run the production pipeline, run the following command in your terminal:
 ```bash
 python run_pipeline.py \
   --input samples/cli_onnx_test.jpg \
-  --student-id 11 \
   --school-name scholars_home \
   --academic-year 2025-2026 \
   --class 9th \
   --section 9th-A \
   --subject SCIENCE_CHEMISTRY \
   --assessment-id Assessment1 \
+  --student-id 11 \
   --marksense-uuid ms_456 \
-  --question-paper-uuid qp_789
+  --question-paper-uuid qp_789 \
+  --output-dir outputs
 ```
 
-### 📄 Metadata JSON Outputs
-The pipeline outputs four structured JSON results inside the `outputs/` directory:
-* **`res_pages.json`**: Pages indices mapped to S3 URLs in global sheet order.
-* **`res_blocks.json`**: Cropped block metadata including bounding boxes (`{x, y, w, h}`), types, and question anchor tags.
-* **`res_contents.json`**: Extracted OCR text strings matched with block URLs.
-* **`res_lookup.json`**: Maps standard student responses (answers, drawings, tables) to their preceding question anchors.
+### 📄 Generated JSON Outputs
+The pipeline outputs four structured JSON results inside the `--output-dir` folder:
+* **`res_pages.json`**: Links each page number to its uploaded S3 URL (maintaining page order).
+* **`res_blocks.json`**: Lists cropped blocks containing block numbers, S3 URLs, layout types, bounding boxes (`{x, y, w, h}`), and whether the block is a question label (question anchor).
+* **`res_contents.json`**: Lists block numbers, S3 URLs, and their extracted OCR text.
+* **`res_lookup.json`**: Maps student answer blocks (drawings, standard text) to their preceding question anchors.
 
 ---
 
-## 🎨 7. Streamlit Dashboard & Testing Utilities
+## 🎨 4. Layout Playground & CLI Visualizers (`app.py` & `predict.py`)
 
-### Run the Interactive Dashboard:
+These tools are designed to verify layout detection quality visually by drawing translucent color bounding box overlays on top of the images.
+
+### 💻 Streamlit Web Application Dashboard
 Starts a local Streamlit web application on port `8501`:
 ```bash
 streamlit run app.py
 ```
-*Allows uploading batch files, adjusting confidence thresholds, checking latency, and downloading annotated layout previews.*
+* **Playground Mode:** Upload single or batch images to visually inspect YOLO detections, change confidence thresholds, download drawings, and check coordinate tables.
+* **Latency Benchmark Mode:** Run timed runs comparing the inference execution speed of standard PyTorch against optimized ONNX Runtime engines.
 
-### Run Standalone CLI Script:
-Outputs an annotated JPEG visualization image showing layout outlines:
+### 🖼️ Standalone CLI Visualization Script
+Run a simple test on an image and save the visual drawing output:
 ```bash
-python predict.py --image samples/cli_onnx_test.jpg --weights models/best.onnx --output samples/output.jpg
+python predict.py \
+  --image samples/cli_onnx_test.jpg \
+  --weights models/110-best.pt \
+  --output outputs/visual_output.jpg
 ```
+*(This script loads the weights, detects blocks, overlays translucent class colors matching the 9 layout classes, and saves the image to `--output`).*
